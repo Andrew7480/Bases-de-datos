@@ -1,0 +1,269 @@
+
+-- XTablas
+DROP TABLE PLAYS_IN;
+DROP TABLE BAND;
+DROP TABLE PLACE;
+DROP TABLE MUSICIAN;
+
+-- XSecuencias
+
+DROP SEQUENCE SQ_band_no;
+DROP SEQUENCE SQ_m_no;
+DROP SEQUENCE SQ_place_no;
+
+-- Tablas
+
+CREATE TABLE BAND(
+band_no NUMBER(9)NOT NULL,
+band_name VARCHAR(20) NOT NULL,
+band_type VARCHAR(10),
+b_date DATE,
+band_home NUMBER(9) NOT NULL,
+band_contact NUMBER(9) NOT NULL
+);
+
+CREATE TABLE PLAYS_IN(
+player NUMBER(9) NOT NULL,
+band_id NUMBER(9) NOT NULL
+);
+
+CREATE TABLE PLACE(
+place_no NUMBER(9) NOT NULL
+);
+
+CREATE TABLE MUSICIAN(
+m_no NUMBER(9) NOT NULL
+);
+
+CREATE SEQUENCE SQ_band_no START WITH 1 INCREMENT BY 1 MAXVALUE 999999999 CYCLE;
+CREATE SEQUENCE SQ_place_no START WITH 1 INCREMENT BY 1 MAXVALUE 999999999 CYCLE;
+CREATE SEQUENCE SQ_m_no START WITH 1 INCREMENT BY 1 MAXVALUE 999999999 CYCLE;
+
+-- Atributos
+
+ALTER TABLE BAND
+MODIFY band_type DEFAULT 'Rock';
+
+-- Primarias
+
+ALTER TABLE BAND
+ADD CONSTRAINT PK_BAND PRIMARY KEY (band_no);
+
+ALTER TABLE PLACE
+ADD CONSTRAINT PK_PLACE PRIMARY KEY (place_no);
+
+ALTER TABLE MUSICIAN
+ADD CONSTRAINT PK_MUSICIAN PRIMARY KEY (m_no);
+
+-- Unicas
+
+ALTER TABLE BAND 
+ADD CONSTRAINT UK_BAND_band_name UNIQUE (band_name);
+
+-- Foraneas
+
+ALTER TABLE PLAYS_IN
+ADD CONSTRAINT FK_PLAYS_IN_BAND FOREIGN KEY (band_id) REFERENCES BAND(band_no); 
+
+ALTER TABLE PLAYS_IN
+ADD CONSTRAINT FK_PLAYS_IN_MUSICIAN FOREIGN KEY (player) REFERENCES MUSICIAN(m_no); 
+
+ALTER TABLE BAND
+ADD CONSTRAINT FK_BAND_PLACE FOREIGN KEY (band_home) REFERENCES PLACE(place_no); 
+
+ALTER TABLE BAND
+ADD CONSTRAINT FK_BAND_MUSICIAN FOREIGN KEY (band_contact) REFERENCES MUSICIAN(m_no); 
+
+-- Tuplas
+
+ALTER TABLE BAND 
+ADD CONSTRAINT CK_BAND_band_type CHECK (band_type = 'rock' OR band_type = 'classical' OR band_type = 'jazz' OR band_type = 'blues' OR band_type = 'pop' OR band_type = 'soul');
+
+-- Primarias
+
+ALTER TABLE PLAYS_IN
+ADD CONSTRAINT PK_PLAYS_IN PRIMARY KEY (player, band_id);
+
+-- Poblar
+
+BEGIN 
+    FOR i IN 1..22 LOOP 
+        INSERT INTO MUSICIAN VALUES (SQ_m_no.nextval);
+    END LOOP;
+    
+    FOR i IN 1..9 LOOP 
+        INSERT INTO PLACE VALUES (SQ_place_no.nextval);
+    END LOOP;
+end;
+/
+
+-- AtributosOK 
+
+INSERT INTO BAND
+VALUES (1,'band1','classical',NULL,1,3); -- FK_BAND_PLACE, FK_BAND_MUSICIAN 
+
+INSERT INTO BAND
+VALUES (2,'band2','jazz',NULL,2,8); -- FK_BAND_PLACE, FK_BAND_MUSICIAN 
+
+-- AtributosNoOK 
+
+INSERT INTO BAND
+VALUES (1,NULL,'classical',NULL,1,3); -- NOT NULL
+
+INSERT INTO BAND
+VALUES (1,'band1','classical',NULL,1,3); -- PK_BAND 
+
+INSERT INTO BAND
+VALUES (2,'band2','jazz',NULL,10,8); -- FK_BAND_PLACE
+
+-- TuplasOK
+
+INSERT INTO BAND
+VALUES (3,'band3','jazz',NULL,5,10); --CK_BAND_band_type
+
+INSERT INTO PLAYS_IN
+VALUES (3,3); -- PK_PLAYS_IN
+
+INSERT INTO PLAYS_IN
+VALUES (7,1); -- PK_PLAYS_IN
+
+-- TuplasNoOK
+
+INSERT INTO PLAYS_IN
+VALUES (7,1); -- PK_PLAYS_IN
+
+INSERT INTO BAND
+VALUES (4,'band4','j-pop',NULL,5,10); --CK_BAND_band_type
+
+-- Acciones
+
+ALTER TABLE PLAYS_IN
+DROP CONSTRAINT FK_PLAYS_IN_BAND;
+
+ALTER TABLE PLAYS_IN
+DROP CONSTRAINT FK_PLAYS_IN_MUSICIAN;
+
+ALTER TABLE PLAYS_IN
+ADD CONSTRAINT FK_PLAYS_IN_BAND FOREIGN KEY (band_id) REFERENCES BAND(band_no) ON DELETE CASCADE; --esto se hace para que si una banda es borrada todas las referencias dentro de la tabla PLAYS_IN se borran
+
+ALTER TABLE PLAYS_IN
+ADD CONSTRAINT FK_PLAYS_IN_MUSICIAN FOREIGN KEY (player) REFERENCES MUSICIAN(m_no) ON DELETE CASCADE; --esto se hace para que si un musico es borrado dentro de MUSICIAN todas las referencias dentro de la tabla PLAYS_IN se borran
+
+-- AccionesOK
+
+SELECT * FROM PLAYS_IN;
+
+SELECT * FROM MUSICIAN;
+
+DELETE FROM MUSICIAN WHERE m_no = 7;
+
+SELECT * FROM PLAYS_IN;
+
+SELECT * FROM BAND;
+
+DELETE FROM BAND WHERE band_no = 3;
+
+SELECT * FROM PLAYS_IN;
+
+INSERT INTO MUSICIAN VALUES (7);
+
+--XPoblar
+
+TRUNCATE TABLE PLAYS_IN;
+TRUNCATE TABLE BAND;
+
+-- XDisparadores
+
+DROP TRIGGER tr_INSERT_BAND;
+DROP TRIGGER tr_UPDATE_BAND;
+DROP TRIGGER tr_UPDATE_PLAYS_IN;
+DROP TRIGGER tr_INSERT_PLAYS_IN;
+
+-- Disparadores
+
+CREATE OR REPLACE TRIGGER tr_INSERT_BAND
+BEFORE INSERT ON BAND
+FOR EACH ROW 
+DECLARE CANTIDAD_BANDAS NUMBER(9);
+BEGIN 
+    SELECT COUNT(*) INTO CANTIDAD_BANDAS FROM BAND;
+    
+    IF ((:NEW.b_date > SYSDATE) AND (:NEW.b_date IS NOT NULL)) OR (:NEW.band_no != CANTIDAD_BANDAS+1) THEN 
+    RAISE_APPLICATION_ERROR (-20009, 'No se puede insertar');
+    END IF;
+    END tr_INSERT_BAND;
+ 
+/
+    
+CREATE OR REPLACE TRIGGER tr_UPDATE_BAND
+BEFORE UPDATE ON BAND
+FOR EACH ROW 
+BEGIN 
+    IF ((:NEW.band_name != :OLD.band_name) OR (:NEW.band_type != :OLD.band_type) OR (:NEW.band_home != :OLD.band_home) OR (:NEW.band_contact != :OLD.band_contact)) THEN 
+    RAISE_APPLICATION_ERROR (-20001, 'no puedes actualizar algo en esta tabla que no sea b_date');
+    END IF;
+    
+    IF ((:OLD.b_date IS NOT NULL)) THEN 
+    RAISE_APPLICATION_ERROR (-20002, 'b_date ya tiene una fecha');
+    END IF;
+    END tr_UPDATE_BAND; 
+    
+/     
+
+CREATE OR REPLACE TRIGGER tr_UPDATE_PLAYS_IN
+BEFORE UPDATE ON PLAYS_IN
+FOR EACH ROW 
+BEGIN 
+    RAISE_APPLICATION_ERROR (-20003, 'No puedes modificar musicos en la tabla plays_in');
+    END tr_UPDATE_PLAYS_IN;
+
+/ 
+
+CREATE OR REPLACE TRIGGER tr_INSERT_PLAYS_IN
+BEFORE INSERT ON PLAYS_IN
+FOR EACH ROW 
+DECLARE CANTIDAD_MUSICOS NUMBER(2);
+BEGIN 
+    SELECT COUNT(*) INTO CANTIDAD_MUSICOS 
+    FROM PLAYS_IN 
+    WHERE band_id = :NEW.band_id ;
+    
+    IF (CANTIDAD_MUSICOS >= 10) THEN 
+    RAISE_APPLICATION_ERROR (-20004, 'La banda no puede tener mas de 10 musicos en ella');
+    END IF;
+    END tr_INSERT_PLAYS_IN;
+/
+
+-- DisparadoresOK
+
+INSERT INTO BAND
+VALUES (1,'band1','classical',NULL,1,3);
+
+UPDATE BAND 
+SET b_date = TO_DATE('2024-01-03', 'YYYY-MM-DD')
+WHERE band_no = 1;
+
+INSERT INTO PLAYS_IN VALUES (1,1);
+
+-- DisparadoresNoOK
+    
+UPDATE BAND 
+SET band_name = 'nuevo_band_name' --solo se puede modificar la fecha si no la tiene aun
+WHERE band_no = 1;
+
+UPDATE BAND 
+SET b_date = TO_DATE('2024-03-04', 'YYYY-MM-DD')  --no se pede modificar nada que no sea una fecha nula
+WHERE band_no = 1;
+
+INSERT INTO PLAYS_IN VALUES (2,1);
+INSERT INTO PLAYS_IN VALUES (3,1);
+INSERT INTO PLAYS_IN VALUES (4,1);
+INSERT INTO PLAYS_IN VALUES (5,1);
+INSERT INTO PLAYS_IN VALUES (6,1);
+INSERT INTO PLAYS_IN VALUES (7,1);
+INSERT INTO PLAYS_IN VALUES (8,1);
+INSERT INTO PLAYS_IN VALUES (9,1);
+INSERT INTO PLAYS_IN VALUES (10,1);
+INSERT INTO PLAYS_IN VALUES (11,1);   -- ya tiene 10 musicos
+    
+    
